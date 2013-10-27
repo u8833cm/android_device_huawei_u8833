@@ -3,22 +3,13 @@
 #AUDIO_POLICY_TEST := true
 #ENABLE_AUDIO_DUMP := true
 
-ifeq ($(TARGET_BOOTLOADER_BOARD_NAME),u8833)
-TARGET_HAS_QACT := true
 LOCAL_PATH := $(call my-dir)
 include $(CLEAR_VARS)
 
 LOCAL_SRC_FILES := \
+    AudioHardware.cpp \
     audio_hw_hal.cpp \
     HardwarePinSwitching.c
-
-ifeq ($(strip $(TARGET_HAS_QACT)),true)
-LOCAL_SRC_FILES += \
-    AudioHardware_cad.cpp
-else
-LOCAL_SRC_FILES += \
-    AudioHardware.cpp
-endif
 
 ifeq ($(BOARD_HAVE_BLUETOOTH),true)
   LOCAL_CFLAGS += -DWITH_A2DP
@@ -26,7 +17,6 @@ endif
 
 ifeq ($(BOARD_HAVE_QCOM_FM),true)
   LOCAL_CFLAGS += -DWITH_QCOM_FM
-  LOCAL_CFLAGS += -DQCOM_FM_ENABLED
 endif
 
 ifeq ($(call is-android-codename-in-list,ICECREAM_SANDWICH),true)
@@ -37,9 +27,6 @@ ifeq ($(strip $(BOARD_USES_SRS_TRUEMEDIA)),true)
 LOCAL_CFLAGS += -DSRS_PROCESSING
 endif
 
-LOCAL_CFLAGS += -DQCOM_VOIP_ENABLED
-LOCAL_CFLAGS += -DQCOM_TUNNEL_LPA_ENABLED
-
 LOCAL_SHARED_LIBRARIES := \
     libcutils       \
     libutils        \
@@ -49,19 +36,11 @@ ifneq ($(TARGET_SIMULATOR),true)
 LOCAL_SHARED_LIBRARIES += libdl
 endif
 
-ifeq ($(strip $(TARGET_HAS_QACT)),true)
-LOCAL_SHARED_LIBRARIES += libaudcal
-endif
-
-# hack for prebuilt
-$(shell mkdir -p $(OUT)/obj/SHARED_LIBRARIES/libaudcal_intermediates/)
-$(shell touch $(OUT)/obj/SHARED_LIBRARIES/libaudcal_intermediates/export_includes)
-
 LOCAL_STATIC_LIBRARIES := \
     libmedia_helper \
     libaudiohw_legacy
 
-LOCAL_MODULE := audio.primary.u8833
+LOCAL_MODULE := audio.primary.msm7627a
 LOCAL_MODULE_PATH := $(TARGET_OUT_SHARED_LIBRARIES)/hw
 LOCAL_MODULE_TAGS := optional
 
@@ -74,10 +53,11 @@ LOCAL_C_INCLUDES += hardware/libhardware_legacy/include
 LOCAL_C_INCLUDES += frameworks/base/include
 LOCAL_C_INCLUDES += system/core/include
 
-# LOCAL_C_INCLUDES += $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr/include
-# LOCAL_ADDITIONAL_DEPENDENCIES := $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr
+LOCAL_C_INCLUDES += $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr/include
+LOCAL_ADDITIONAL_DEPENDENCIES := $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr
 
 include $(BUILD_SHARED_LIBRARY)
+
 
 # The audio policy is implemented on top of legacy policy code
 include $(CLEAR_VARS)
@@ -92,11 +72,10 @@ LOCAL_SHARED_LIBRARIES := \
     libmedia
 
 LOCAL_STATIC_LIBRARIES := \
-    libaudiohw_legacy \
     libmedia_helper \
     libaudiopolicy_legacy
 
-LOCAL_MODULE := audio_policy.u8833
+LOCAL_MODULE := audio_policy.msm7627a
 LOCAL_MODULE_PATH := $(TARGET_OUT_SHARED_LIBRARIES)/hw
 LOCAL_MODULE_TAGS := optional
 
@@ -106,9 +85,7 @@ endif
 
 LOCAL_C_INCLUDES := hardware/libhardware_legacy/audio
 
-# LOCAL_C_INCLUDES += $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr/include
-# LOCAL_ADDITIONAL_DEPENDENCIES := $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr
+LOCAL_C_INCLUDES += $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr/include
+LOCAL_ADDITIONAL_DEPENDENCIES := $(TARGET_OUT_INTERMEDIATES)/KERNEL_OBJ/usr
 
 include $(BUILD_SHARED_LIBRARY)
-
-endif # TARGET_BOOTLOADER_BOARD_NAME
