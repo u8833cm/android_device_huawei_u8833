@@ -111,7 +111,9 @@ static int snd_device = -1;
 #define PCM_CTL_DEVICE "/dev/msm_pcm_ctl"
 #define PREPROC_CTL_DEVICE "/dev/msm_preproc_ctl"
 #define VOICE_MEMO_DEVICE "/dev/msm_voicememo"
+#ifdef QCOM_FM_ENABLED
 #define FM_DEVICE  "/dev/msm_fm"
+#endif
 #define BTHEADSET_VGS "bt_headset_vgs"
 #define MVS_DEVICE "/dev/msm_mvs"
 
@@ -605,12 +607,15 @@ String8 AudioHardware::getParameters(const String8& keys)
         }
     }
 
+#ifdef QCOM_FM_ENABLED
+
     key = String8("Fm-radio");
     if ( param.get(key,value) == NO_ERROR ) {
         if (IsFmon()||(mCurSndDevice == SND_DEVICE_FM_ANALOG_STEREO_HEADSET)){
             param.addInt(String8("isFMON"), true );
         }
     }
+#endif
 
     key = String8(ECHO_SUPRESSION);
     if (param.get(key, value) == NO_ERROR) {
@@ -1357,11 +1362,8 @@ status_t AudioHardware::setVoiceVolume(float v)
         LOGW("setVoiceVolume(%f) over 1.0, assuming 1.0\n", v);
         v = 1.0;
     }
-    // Added 0.4 to current volume, as in voice call Mute cannot be set as minimum volume(0.00)
-    // setting Rx volume level as 2 for minimum and 7 as max level.
-    v = 0.4 + v;
 
-    int vol = lrint(v * 5.0);
+    int vol = lrint(v * 7.0);
     LOGD("setVoiceVolume(%f)\n", v);
     LOGI("Setting in-call volume to %d (available range is 2 to 7)\n", vol);
 
@@ -1376,6 +1378,7 @@ status_t AudioHardware::setVoiceVolume(float v)
     return NO_ERROR;
 }
 
+#ifdef QCOM_FM_ENABLED
 status_t AudioHardware::setFmVolume(float v)
 {
     if (v < 0.0) {
@@ -1394,6 +1397,7 @@ status_t AudioHardware::setFmVolume(float v)
     set_volume_rpc(SND_DEVICE_CURRENT, SND_METHOD_VOICE, vol, m7xsnddriverfd);
     return NO_ERROR;
 }
+#endif
 
 status_t AudioHardware::setMasterVolume(float v)
 {
@@ -1502,6 +1506,7 @@ status_t AudioHardware::doAudioRouteOrMute(uint32_t device)
     }
     return rc;
 }
+#ifdef QCOM_FM_ENABLED
 
 bool AudioHardware::isFMAnalog()
 {
@@ -1515,6 +1520,7 @@ bool AudioHardware::isFMAnalog()
 
     return isAfm;
 }
+#endif
 status_t AudioHardware::doRouting(AudioStreamInMSM72xx *input)
 {
     /* currently this code doesn't work without the htc libacoustic */
@@ -1544,6 +1550,7 @@ status_t AudioHardware::doRouting(AudioStreamInMSM72xx *input)
             } else if (inputDevice & AudioSystem::DEVICE_IN_WIRED_HEADSET) {
                     LOGI("Routing audio to Wired Headset\n");
                     new_snd_device = SND_DEVICE_HEADSET;
+#ifdef QCOM_FM_ENABLED
             } else if (inputDevice & AudioSystem::DEVICE_IN_FM_RX_A2DP) {
                     LOGI("Routing audio from FM to Bluetooth A2DP\n");
                     new_snd_device = SND_DEVICE_FM_DIGITAL_BT_A2DP_HEADSET;
@@ -1551,6 +1558,7 @@ status_t AudioHardware::doRouting(AudioStreamInMSM72xx *input)
             } else if (inputDevice & AudioSystem::DEVICE_IN_FM_RX) {
                     LOGI("Routing audio to FM\n");
                     enableDgtlFmDriver = true;
+#endif
             } else {
                 if (outputDevices & AudioSystem::DEVICE_OUT_SPEAKER) {
                     LOGI("Routing audio to Speakerphone\n");
@@ -1628,6 +1636,10 @@ status_t AudioHardware::doRouting(AudioStreamInMSM72xx *input)
             new_snd_device = SND_DEVICE_CARKIT;
         } else if (outputDevices & AudioSystem::DEVICE_OUT_WIRED_HEADSET) {
             LOGI("Routing audio to Wired Headset\n");
+            new_snd_device = SND_DEVICE_HEADSET;
+            new_post_proc_feature_mask = (ADRC_ENABLE | EQ_ENABLE | RX_IIR_ENABLE | MBADRC_ENABLE);
+        } else if (outputDevices & AudioSystem::DEVICE_OUT_WIRED_HEADPHONE) {
+            ALOGI("Routing audio to Wired Headphone\n");
             new_snd_device = SND_DEVICE_HEADSET;
             new_post_proc_feature_mask = (ADRC_ENABLE | EQ_ENABLE | RX_IIR_ENABLE | MBADRC_ENABLE);
         } else if (outputDevices & AudioSystem::DEVICE_OUT_SPEAKER) {

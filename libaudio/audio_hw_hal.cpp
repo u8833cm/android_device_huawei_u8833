@@ -240,6 +240,7 @@ static int in_set_parameters(struct audio_stream *stream, const char *kvpairs)
     struct qcom_stream_in *in =
         reinterpret_cast<struct qcom_stream_in *>(stream);
     return in->qcom_in->setParameters(String8(kvpairs));
+    AudioParameter parms = AudioParameter(String8(kvpairs));
 }
 
 static char * in_get_parameters(const struct audio_stream *stream,
@@ -315,7 +316,9 @@ static uint32_t adev_get_supported_devices(const struct audio_hw_device *dev)
             AUDIO_DEVICE_OUT_ANLG_DOCK_HEADSET |
             AUDIO_DEVICE_OUT_DGTL_DOCK_HEADSET |
             AUDIO_DEVICE_OUT_ALL_SCO |
+#ifdef QCOM_FM_ENABLED
             AUDIO_DEVICE_OUT_FM |
+#endif
             AUDIO_DEVICE_OUT_DIRECTOUTPUT |
             AUDIO_DEVICE_OUT_DEFAULT |
             /* IN */
@@ -327,8 +330,10 @@ static uint32_t adev_get_supported_devices(const struct audio_hw_device *dev)
             AUDIO_DEVICE_IN_AUX_DIGITAL |
             AUDIO_DEVICE_IN_BACK_MIC |
             AUDIO_DEVICE_IN_ALL_SCO |
+#ifdef QCOM_FM_ENABLED
             AUDIO_DEVICE_IN_FM_RX |
             AUDIO_DEVICE_IN_FM_RX_A2DP |
+#endif
             AUDIO_DEVICE_IN_DEFAULT);
 }
 
@@ -351,12 +356,13 @@ static int adev_set_master_volume(struct audio_hw_device *dev, float volume)
     return qadev->hwif->setMasterVolume(volume);
 }
 
+#ifdef QCOM_FM_ENABLED
 static int adev_set_fm_volume(struct audio_hw_device *dev, float volume)
 {
     struct qcom_audio_device *qadev = to_ladev(dev);
     return qadev->hwif->setFmVolume(volume);
 }
-
+#endif
 static int adev_set_mode(struct audio_hw_device *dev, int mode)
 {
     struct qcom_audio_device *qadev = to_ladev(dev);
@@ -601,7 +607,9 @@ static int qcom_adev_open(const hw_module_t* module, const char* name,
     qadev->device.init_check = adev_init_check;
     qadev->device.set_voice_volume = adev_set_voice_volume;
     qadev->device.set_master_volume = adev_set_master_volume;
+#ifdef QCOM_FM_ENABLED
     qadev->device.set_fm_volume = adev_set_fm_volume;
+#endif
     qadev->device.set_mode = adev_set_mode;
     qadev->device.set_mic_mute = adev_set_mic_mute;
     qadev->device.get_mic_mute = adev_get_mic_mute;
