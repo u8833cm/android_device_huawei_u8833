@@ -46,7 +46,6 @@ public class HuaweiQualcommRIL extends RIL implements CommandsInterface {
     protected IccHandler mIccHandler;
     protected String mAid;
     protected boolean mUSIM = false;
-
     protected String[] mLastDataIface = new String[20];
     boolean RILJ_LOGV = true;
     boolean RILJ_LOGD = true;
@@ -63,10 +62,9 @@ public class HuaweiQualcommRIL extends RIL implements CommandsInterface {
     static final int RIL_REQUEST_SIM_TRANSMIT_CHANNEL = 10029;
 
 
-    public HuaweiQualcommRIL(Context context, int networkMode, int cdmaSubscription) {
+    public QualcommSharedRIL(Context context, int networkMode, int cdmaSubscription) {
         super(context, networkMode, cdmaSubscription);
         mSetPreferredNetworkType = -1;
-        mQANElements = 4;
     }
 
     @Override public void
@@ -160,9 +158,11 @@ public class HuaweiQualcommRIL extends RIL implements CommandsInterface {
         status.setUniversalPinState(p.readInt());
         status.setGsmUmtsSubscriptionAppIndex(p.readInt());
         status.setCdmaSubscriptionAppIndex(p.readInt());
+
         status.setImsSubscriptionAppIndex(p.readInt());
 
         int numApplications = p.readInt();
+
 	if (RILJ_LOGD) riljLog( "numApplications " + numApplications);
         // Limit to maximum allowed applications
         if (numApplications > IccCardStatus.CARD_MAX_APPS) {
@@ -180,6 +180,10 @@ public class HuaweiQualcommRIL extends RIL implements CommandsInterface {
             ca.pin1_replaced = p.readInt();
             ca.pin1 = ca.PinStateFromRILInt(p.readInt());
             ca.pin2 = ca.PinStateFromRILInt(p.readInt());
+            p.readInt(); //remaining_count_pin1
+            p.readInt(); //remaining_count_puk1
+            p.readInt(); //remaining_count_pin2
+            p.readInt(); //remaining_count_puk2
             status.addApplication(ca);
         }
         int appIndex = -1;
@@ -403,7 +407,6 @@ public class HuaweiQualcommRIL extends RIL implements CommandsInterface {
 
             // Either command succeeds or command fails but with data payload
             try {switch (rr.mRequest) {
-
             case RIL_REQUEST_GET_SIM_STATUS: ret =  responseIccCardStatus(p); break;
             case RIL_REQUEST_ENTER_SIM_PIN: ret =  responseInts(p); break;
             case RIL_REQUEST_ENTER_SIM_PUK: ret =  responseInts(p); break;
@@ -523,7 +526,6 @@ public class HuaweiQualcommRIL extends RIL implements CommandsInterface {
             case RIL_REQUEST_VOICE_RADIO_TECH: ret = responseInts(p); break;
             default:
                 throw new RuntimeException("Unrecognized solicited response: " + rr.mRequest);
-
             }} catch (Throwable tr) {
                 // Exceptions here usually mean invalid RIL responses
 
@@ -586,7 +588,7 @@ public class HuaweiQualcommRIL extends RIL implements CommandsInterface {
                 int state = p.readInt();
                 setRadioStateFromRILInt(state);
                 break;
-		        case RIL_UNSOL_RIL_CONNECTED:
+            		case RIL_UNSOL_RIL_CONNECTED:
                 if (RILJ_LOGD) unsljLogRet(response, ret);
 				// Initial conditions
                 setRadioPower(false, null);
@@ -610,7 +612,7 @@ public class HuaweiQualcommRIL extends RIL implements CommandsInterface {
         }
     }
 
-    private void setRadioStateFromRILInt (int stateCode) {
+    protected void setRadioStateFromRILInt (int stateCode) {
         CommandsInterface.RadioState radioState;
         HandlerThread handlerThread;
         Looper looper;
@@ -640,7 +642,12 @@ public class HuaweiQualcommRIL extends RIL implements CommandsInterface {
                     mIccHandler = new IccHandler(this,looper);
                     mIccHandler.run();
                 }
-                radioState = CommandsInterface.RadioState.RADIO_ON;
+                if (mPhoneType == RILConstants.CDMA_PHONE) {
+                    radioState = CommandsInterface.RadioState.RUIM_NOT_READY;
+                } else {
+                    radioState = CommandsInterface.RadioState.SIM_NOT_READY;
+                }
+                setRadioState(radioState);
                 break;
             default:
                 throw new RuntimeException("Unrecognized RIL_RadioState: " + stateCode);
@@ -682,7 +689,11 @@ public class HuaweiQualcommRIL extends RIL implements CommandsInterface {
                             break;
                         }
 
-                        mRil.setRadioState(CommandsInterface.RadioState.RADIO_ON);
+                        if (mPhoneType == RILConstants.CDMA_PHONE) {
+                            mRil.setRadioState(CommandsInterface.RadioState.RUIM_LOCKED_OR_ABSENT);
+                        } else {
+                            mRil.setRadioState(CommandsInterface.RadioState.SIM_LOCKED_OR_ABSENT);
+                        }
                     } else {
                         int appIndex = -1;
                         if (mPhoneType == RILConstants.CDMA_PHONE) {
@@ -703,8 +714,10 @@ public class HuaweiQualcommRIL extends RIL implements CommandsInterface {
                                 switch (app_type) {
                                     case APPTYPE_SIM:
                                     case APPTYPE_USIM:
+                                        mRil.setRadioState(CommandsInterface.RadioState.SIM_LOCKED_OR_ABSENT);
+                                        break;
                                     case APPTYPE_RUIM:
-                                        mRil.setRadioState(CommandsInterface.RadioState.RADIO_ON);
+                                        mRil.setRadioState(CommandsInterface.RadioState.RUIM_LOCKED_OR_ABSENT);
                                         break;
                                     default:
                                         Log.e(LOG_TAG, "Currently we don't handle SIMs of type: " + app_type);
@@ -715,8 +728,10 @@ public class HuaweiQualcommRIL extends RIL implements CommandsInterface {
                                 switch (app_type) {
                                     case APPTYPE_SIM:
                                     case APPTYPE_USIM:
+                                        mRil.setRadioState(CommandsInterface.RadioState.SIM_READY);
+                                        break;
                                     case APPTYPE_RUIM:
-                                        mRil.setRadioState(CommandsInterface.RadioState.RADIO_ON);
+                                        mRil.setRadioState(CommandsInterface.RadioState.RUIM_READY);
                                         break;
                                     default:
                                         Log.e(LOG_TAG, "Currently we don't handle SIMs of type: " + app_type);
@@ -738,7 +753,6 @@ public class HuaweiQualcommRIL extends RIL implements CommandsInterface {
                     break;
                 case EVENT_RADIO_OFF_OR_UNAVAILABLE:
                     mRadioOn = false;
-
                 default:
                     Log.e(LOG_TAG, " Unknown Event " + paramMessage.what);
                     break;
@@ -794,4 +808,31 @@ public class HuaweiQualcommRIL extends RIL implements CommandsInterface {
 
         send(rr);
     }
+
+    @Override
+    protected Object
+    responseOperatorInfos(Parcel p) {
+        String strings[] = (String [])responseStrings(p);
+        ArrayList<OperatorInfo> ret;
+
+        if (strings.length % 5 != 0) {
+            throw new RuntimeException(
+                "RIL_REQUEST_QUERY_AVAILABLE_NETWORKS: invalid response. Got "
+                + strings.length + " strings, expected multiple of 5");
+        }
+
+        ret = new ArrayList<OperatorInfo>(strings.length / 5);
+
+        for (int i = 0 ; i < strings.length ; i += 5) {
+            ret.add (
+                new OperatorInfo(
+                    strings[i+0],
+                    strings[i+1],
+                    strings[i+2],
+                    strings[i+3]));
+        }
+
+        return ret;
+    }
+
 }
