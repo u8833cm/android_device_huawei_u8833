@@ -16,7 +16,7 @@
 
 
 // #define LOG_NDEBUG 0
-#define LOG_TAG "lights.u8833"
+#define LOG_TAG "lights.u8815"
 
 #include <cutils/log.h>
 
@@ -31,7 +31,6 @@
 #include <sys/types.h>
 
 #include <hardware/lights.h>
-#include <hardware_legacy/power.h>
 
 /******************************************************************************/
 
@@ -42,8 +41,6 @@ static struct light_state_t g_battery;
 static int g_backlight = 255;
 static int g_buttons = 0;
 static int g_attention = 0;
-
-static pthread_t t_led_blink = 0;
 
 char const*const RED_LED_FILE
         = "/sys/class/leds/red/brightness";
@@ -57,12 +54,17 @@ char const*const BLUE_LED_FILE
 char const*const LCD_FILE
         = "/sys/class/leds/lcd-backlight/brightness";
 
+char const*const RED_FREQ_FILE
+        = "/sys/class/leds/red/device/grpfreq";
+
+char const*const RED_PWM_FILE
+        = "/sys/class/leds/red/device/grppwm";
+
+char const*const RED_BLINK_FILE
+        = "/sys/class/leds/red/device/blink";
+
 char const*const BUTTON_FILE
         = "/sys/class/leds/button-backlight/brightness";
-
-int red, green, blue = 0;
-int blink, freq, pwm = 0;
-int totalMS, onMS, offMS = 0;
 
 /**
  * device methods
@@ -90,7 +92,7 @@ write_int(char const* path, int value)
         return amt == -1 ? -errno : 0;
     } else {
         if (already_warned == 0) {
-            ALOGE("write_int failed to open %s\n", path);
+            LOGE("write_int failed to open %s\n", path);
             already_warned = 1;
         }
         return -errno;
@@ -137,36 +139,14 @@ set_light_buttons(struct light_device_t* dev,
     return err;
 }
 
-void
-*led_blink()
-{
-    while(blink) {
-        // pwm = 0 => always off
-        if(pwm != 0) {
-            write_int(RED_LED_FILE, red);
-            write_int(GREEN_LED_FILE, green);
-            write_int(BLUE_LED_FILE, blue);
-            usleep(onMS * 1000);
-        }
-
-        // pwm = 255 => always on
-        if(pwm != 255) {
-            write_int(RED_LED_FILE, 0);
-            write_int(GREEN_LED_FILE, 0);
-            write_int(BLUE_LED_FILE, 0);
-            usleep(offMS * 1000);
-        }
-    }
-    release_wake_lock("blink");
-    return 0;
-}
-
 static int
 set_speaker_light_locked(struct light_device_t* dev,
         struct light_state_t const* state)
 {
     int len;
-    int alpha;
+    int alpha, red, green, blue;
+    int blink, freq, pwm;
+    int onMS, offMS;
     unsigned int colorRGB;
 
     switch (state->flashMode) {
@@ -184,7 +164,7 @@ set_speaker_light_locked(struct light_device_t* dev,
     colorRGB = state->color;
 
 #if 0
-    ALOGD("set_speaker_light_locked colorRGB=%08X, onMS=%d, offMS=%d\n",
+    LOGD("set_speaker_light_locked colorRGB=%08X, onMS=%d, offMS=%d\n",
             colorRGB, onMS, offMS);
 #endif
 
@@ -192,14 +172,18 @@ set_speaker_light_locked(struct light_device_t* dev,
     green = (colorRGB >> 8) & 0xFF;
     blue = colorRGB & 0xFF;
 
+    write_int(RED_LED_FILE, red);
+    write_int(GREEN_LED_FILE, green);
+    write_int(BLUE_LED_FILE, blue);
+
     if (onMS > 0 && offMS > 0) {
-        totalMS = onMS + offMS;
+        int totalMS = onMS + offMS;
 
         // the LED appears to blink about once per second if freq is 20
         // 1000ms / 20 = 50
         freq = totalMS / 50;
         // pwm specifies the ratio of ON versus OFF
-        // pwm = 0 => always off
+        // pwm = 0 -> always off
         // pwm = 255 => always on
         pwm = (onMS * 255) / totalMS;
 
@@ -214,14 +198,11 @@ set_speaker_light_locked(struct light_device_t* dev,
         pwm = 0;
     }
 
-    if(blink) {
-        acquire_wake_lock(PARTIAL_WAKE_LOCK, "blink");
-        pthread_create(&t_led_blink, NULL, led_blink, NULL);
-    } else {
-        write_int(RED_LED_FILE, red);
-        write_int(GREEN_LED_FILE, green);
-        write_int(BLUE_LED_FILE, blue);
-    }
+        if (blink) {
+            write_int(RED_FREQ_FILE, freq);
+            write_int(RED_PWM_FILE, pwm);
+        }
+        write_int(RED_BLINK_FILE, blink);
 
     return 0;
 }
@@ -339,7 +320,7 @@ static struct hw_module_methods_t lights_module_methods = {
 /*
  * The lights Module
  */
-struct hw_module_t HAL_MODULE_INFO_SYM = {
+const struct hw_module_t HAL_MODULE_INFO_SYM = {
     .tag = HARDWARE_MODULE_TAG,
     .version_major = 1,
     .version_minor = 0,
